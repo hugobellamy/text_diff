@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "text_diff"
+  site-url: "https://hugobellamy.github.io/text_diff"
+  description: ""
+  repo-branch: main
+  repo-url: "https://github.com/hugobellamy/text_diff"

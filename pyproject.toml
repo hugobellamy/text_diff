@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "text_diff"
+dynamic = ["version"]
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Hugo Bellamy", email = "hugo.bellamy8@gmail.com"}]
+keywords = ['nbdev']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+    "jupyter>=1.1.1",
+    "jupyterlab-quarto>=0.3.5",
+    "nbdev>=3.0.12",
+]
+
+[project.urls]
+Repository = "https://github.com/hugobellamy/text_diff"
+Documentation = "https://hugobellamy.github.io/text_diff/"
+
+[project.entry-points.nbdev]
+text_diff = "text_diff._modidx:d"
+
+[tool.setuptools.dynamic]
+version = {attr = "text_diff.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["text_diff"]
+
+[tool.nbdev]
