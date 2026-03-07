@@ -3,3 +3,7 @@ website:
     contents:
       - index.ipynb
       - 00_core.ipynb
+      - 01_diff.ipynb
+      - 02_clean.ipynb
+      - 03_group.ipynb
+      - 04_llm.ipynb
