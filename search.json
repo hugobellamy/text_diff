@@ -1,0 +1,222 @@
+[
+  {
+    "objectID": "diff.html",
+    "href": "diff.html",
+    "title": "diff",
+    "section": "",
+    "text": "Before we can diff two texts, we need to split them into tokens. We diff at the word level (not character level) so that changes are meaningful units. Crucially, we preserve whitespace as separate tokens so the reconstructed text is identical to the original.\n\nsource\n\n\n\ndef tokenize_preserving_whitespace(\n    text:str\n)-&gt;List:\n\nSplit text into tokens (words and whitespace) preserving all characters.\n\nassert tokenize_preserving_whitespace(\"hello world\") == [\"hello\", \" \", \"world\"]\nassert tokenize_preserving_whitespace(\"hello  world\") == [\"hello\", \"  \", \"world\"]\nassert tokenize_preserving_whitespace(\"  leading\") == [\"  \", \"leading\"]\nassert tokenize_preserving_whitespace(\"\") == []\nassert \"\".join(tokenize_preserving_whitespace(\"hello\\nworld  foo\")) == \"hello\\nworld  foo\"",
+    "crumbs": [
+      "diff"
+    ]
+  },
+  {
+    "objectID": "diff.html#tokenization",
+    "href": "diff.html#tokenization",
+    "title": "diff",
+    "section": "",
+    "text": "Before we can diff two texts, we need to split them into tokens. We diff at the word level (not character level) so that changes are meaningful units. Crucially, we preserve whitespace as separate tokens so the reconstructed text is identical to the original.\n\nsource\n\n\n\ndef tokenize_preserving_whitespace(\n    text:str\n)-&gt;List:\n\nSplit text into tokens (words and whitespace) preserving all characters.\n\nassert tokenize_preserving_whitespace(\"hello world\") == [\"hello\", \" \", \"world\"]\nassert tokenize_preserving_whitespace(\"hello  world\") == [\"hello\", \"  \", \"world\"]\nassert tokenize_preserving_whitespace(\"  leading\") == [\"  \", \"leading\"]\nassert tokenize_preserving_whitespace(\"\") == []\nassert \"\".join(tokenize_preserving_whitespace(\"hello\\nworld  foo\")) == \"hello\\nworld  foo\"",
+    "crumbs": [
+      "diff"
+    ]
+  },
+  {
+    "objectID": "diff.html#computing-the-diff",
+    "href": "diff.html#computing-the-diff",
+    "title": "diff",
+    "section": "Computing the diff",
+    "text": "Computing the diff\nWe use Python’s difflib.SequenceMatcher to compare the two token lists. It returns opcodes: equal, insert, delete, replace.\nWe convert these into our op format: - {\"type\": \"equal\", \"text\": \"...\"} — unchanged text - {\"type\": \"add\", \"text\": \"...\"} — new text inserted - {\"type\": \"remove\", \"text\": \"...\"} — old text deleted - {\"type\": \"replace\", \"old_text\": \"...\", \"new_text\": \"...\"} — text swapped\n\nsource\n\ncompute_diff\n\ndef compute_diff(\n    original:str, rewritten:str\n)-&gt;List:\n\nCompute word-level diff between original and rewritten text.\nReturns a list of ops: equal, add, remove, replace. This is the raw diff — no cleanup or grouping applied.\n\n# Test: identical text -&gt; single equal op\nops = compute_diff(\"hello world\", \"hello world\")\nassert len(ops) == 1\nassert ops[0] == {\"type\": \"equal\", \"text\": \"hello world\"}\n\n\n# Test: empty inputs\nassert compute_diff(\"\", \"\") == [{\"type\": \"equal\", \"text\": \"\"}]\nassert compute_diff(\"\", \"hello\") == [{\"type\": \"add\", \"text\": \"hello\"}]\nassert compute_diff(\"hello\", \"\") == [{\"type\": \"remove\", \"text\": \"hello\"}]\n\n\n# Test: simple word replacement\nops = compute_diff(\"the old cat\", \"the new cat\")\nassert ops[0] == {\"type\": \"equal\", \"text\": \"the \"}\nassert ops[1] == {\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"}\nassert ops[2] == {\"type\": \"equal\", \"text\": \" cat\"}\n\n\n# Test: insertion\nops = compute_diff(\"I like cats\", \"I really like cats\")\nassert any(op[\"type\"] == \"add\" and \"really\" in op[\"text\"] for op in ops)\n\n\n# Test: deletion\nops = compute_diff(\"I really like cats\", \"I like cats\")\nassert any(op[\"type\"] == \"remove\" and \"really\" in op[\"text\"] for op in ops)\n\n\n# Test: multiline\nops = compute_diff(\"line one\\nline two\", \"line one\\nline three\")\nassert ops[0][\"type\"] == \"equal\"\nassert any(op[\"type\"] == \"replace\" for op in ops)\n\n# Test: reconstructing original and rewritten from ops\ndef reconstruct(ops):\n    \"\"\"Helper to verify ops can reconstruct both texts.\"\"\"\n    original = \"\"\n    rewritten = \"\"\n    for op in ops:\n        if op[\"type\"] == \"equal\":\n            original += op[\"text\"]\n            rewritten += op[\"text\"]\n        elif op[\"type\"] == \"remove\":\n            original += op[\"text\"]\n        elif op[\"type\"] == \"add\":\n            rewritten += op[\"text\"]\n        elif op[\"type\"] == \"replace\":\n            original += op[\"old_text\"]\n            rewritten += op[\"new_text\"]\n    return original, rewritten\n\norig, rewr = reconstruct(compute_diff(\"the old cat sat\", \"the new cat lay\"))\nassert orig == \"the old cat sat\"\nassert rewr == \"the new cat lay\"",
+    "crumbs": [
+      "diff"
+    ]
+  },
+  {
+    "objectID": "clean.html",
+    "href": "clean.html",
+    "title": "Clean",
+    "section": "",
+    "text": "Raw diffs often contain noisy whitespace-only changes (extra spaces, indent tweaks, newline shifts). clean_newlines auto-accepts these so they don’t clutter the UI, then merges consecutive ops of the same type.\n\nsource\n\n\n\ndef clean_newlines(\n    ops:List\n)-&gt;List:\n\nAuto-accept changes that are ONLY whitespace/newlines.\nRuns before grouping to ensure formatting changes don’t noise up the diffs. After cleaning, merges consecutive ops of the same simple type.\n\n# whitespace-only add -&gt; becomes equal\nops = [{\"type\": \"equal\", \"text\": \"hello\"}, {\"type\": \"add\", \"text\": \"  \"}]\nresult = clean_newlines(ops)\nassert len(result) == 1  # merged into single equal\nassert result[0] == {\"type\": \"equal\", \"text\": \"hello  \"}\n\n\n# whitespace-only remove -&gt; dropped\nops = [{\"type\": \"equal\", \"text\": \"hello\"}, {\"type\": \"remove\", \"text\": \"\\n\"}, {\"type\": \"equal\", \"text\": \"world\"}]\nresult = clean_newlines(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"equal\", \"text\": \"helloworld\"}\n\n\n# whitespace replace (indent change) -&gt; equal with new whitespace\nops = [{\"type\": \"replace\", \"old_text\": \"  \", \"new_text\": \"    \"}]\nresult = clean_newlines(ops)\nassert result == [{\"type\": \"equal\", \"text\": \"    \"}]\n\n\n# real changes pass through untouched\nops = [\n    {\"type\": \"equal\", \"text\": \"the \"},\n    {\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"},\n    {\"type\": \"equal\", \"text\": \" cat\"},\n]\nresult = clean_newlines(ops)\nassert len(result) == 3\nassert result[1] == {\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"}\n\n\n# empty input\nassert clean_newlines([]) == []",
+    "crumbs": [
+      "Clean"
+    ]
+  },
+  {
+    "objectID": "clean.html#cleaning-whitespace-only-changes",
+    "href": "clean.html#cleaning-whitespace-only-changes",
+    "title": "Clean",
+    "section": "",
+    "text": "Raw diffs often contain noisy whitespace-only changes (extra spaces, indent tweaks, newline shifts). clean_newlines auto-accepts these so they don’t clutter the UI, then merges consecutive ops of the same type.\n\nsource\n\n\n\ndef clean_newlines(\n    ops:List\n)-&gt;List:\n\nAuto-accept changes that are ONLY whitespace/newlines.\nRuns before grouping to ensure formatting changes don’t noise up the diffs. After cleaning, merges consecutive ops of the same simple type.\n\n# whitespace-only add -&gt; becomes equal\nops = [{\"type\": \"equal\", \"text\": \"hello\"}, {\"type\": \"add\", \"text\": \"  \"}]\nresult = clean_newlines(ops)\nassert len(result) == 1  # merged into single equal\nassert result[0] == {\"type\": \"equal\", \"text\": \"hello  \"}\n\n\n# whitespace-only remove -&gt; dropped\nops = [{\"type\": \"equal\", \"text\": \"hello\"}, {\"type\": \"remove\", \"text\": \"\\n\"}, {\"type\": \"equal\", \"text\": \"world\"}]\nresult = clean_newlines(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"equal\", \"text\": \"helloworld\"}\n\n\n# whitespace replace (indent change) -&gt; equal with new whitespace\nops = [{\"type\": \"replace\", \"old_text\": \"  \", \"new_text\": \"    \"}]\nresult = clean_newlines(ops)\nassert result == [{\"type\": \"equal\", \"text\": \"    \"}]\n\n\n# real changes pass through untouched\nops = [\n    {\"type\": \"equal\", \"text\": \"the \"},\n    {\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"},\n    {\"type\": \"equal\", \"text\": \" cat\"},\n]\nresult = clean_newlines(ops)\nassert len(result) == 3\nassert result[1] == {\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"}\n\n\n# empty input\nassert clean_newlines([]) == []",
+    "crumbs": [
+      "Clean"
+    ]
+  },
+  {
+    "objectID": "clean.html#extracting-newlines-into-separate-blocks",
+    "href": "clean.html#extracting-newlines-into-separate-blocks",
+    "title": "Clean",
+    "section": "Extracting newlines into separate blocks",
+    "text": "Extracting newlines into separate blocks\nFor the frontend to render line breaks correctly, we split ops at \\n boundaries so each newline is its own equal block. This makes it easy to map ops to visual lines.\n\nsource\n\nextract_newlines_to_blocks\n\ndef extract_newlines_to_blocks(\n    ops:List\n)-&gt;List:\n\nExtract all newlines into their own separate equal blocks.\nRules: - Newlines in equal/add blocks -&gt; separate equal blocks - Newlines in remove blocks -&gt; dropped (not shown) - Newlines in replace blocks -&gt; separate equal blocks (when symmetric)\n\n# equal with newline splits into text + newline + text\nops = [{\"type\": \"equal\", \"text\": \"hello\\nworld\"}]\nresult = extract_newlines_to_blocks(ops)\nassert result == [\n    {\"type\": \"equal\", \"text\": \"hello\"},\n    {\"type\": \"equal\", \"text\": \"\\n\"},\n    {\"type\": \"equal\", \"text\": \"world\"},\n]\n\n\n# add with newline splits similarly\nops = [{\"type\": \"add\", \"text\": \"line1\\nline2\"}]\nresult = extract_newlines_to_blocks(ops)\nassert result == [\n    {\"type\": \"add\", \"text\": \"line1\"},\n    {\"type\": \"equal\", \"text\": \"\\n\"},\n    {\"type\": \"add\", \"text\": \"line2\"},\n]\n\n\n# remove with newline drops the newlines\nops = [{\"type\": \"remove\", \"text\": \"old1\\nold2\"}]\nresult = extract_newlines_to_blocks(ops)\nassert result == [\n    {\"type\": \"remove\", \"text\": \"old1\"},\n    {\"type\": \"remove\", \"text\": \"old2\"},\n]\n\n\n# symmetric replace with newlines\nops = [{\"type\": \"replace\", \"old_text\": \"a\\nb\", \"new_text\": \"x\\ny\"}]\nresult = extract_newlines_to_blocks(ops)\nassert result == [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"\\n\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\n\n\n# asymmetric replace kept as-is\nops = [{\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\\ny\"}]\nresult = extract_newlines_to_blocks(ops)\nassert len(result) == 1\nassert result[0][\"type\"] == \"replace\"\n\n\n# empty input\nassert extract_newlines_to_blocks([]) == []",
+    "crumbs": [
+      "Clean"
+    ]
+  },
+  {
+    "objectID": "clean.html#adding-accepted-flags",
+    "href": "clean.html#adding-accepted-flags",
+    "title": "Clean",
+    "section": "Adding accepted flags",
+    "text": "Adding accepted flags\nBefore handing ops to the frontend, we tag each with an accepted field. Equal blocks are always accepted. Replace ops that just delete 1-3 spaces are auto-accepted too. Everything else defaults to not accepted (pending user review).\n\nsource\n\nadd_accepted_flags\n\ndef add_accepted_flags(\n    ops:List\n)-&gt;List:\n\nAdd accepted field to ops based on auto-accept rules.\n\nequal blocks -&gt; always accepted\nreplace that deletes 1-3 spaces (old=’ ‘/’ ‘/’ ‘, new=’’) -&gt; convert to equal\nadd/remove -&gt; not accepted (pending user review)\n\n\n# equal -&gt; accepted\nresult = add_accepted_flags([{\"type\": \"equal\", \"text\": \"hello\"}])\nassert result == [{\"type\": \"equal\", \"text\": \"hello\", \"accepted\": True}]\n\n\n# add/remove -&gt; not accepted\nresult = add_accepted_flags([\n    {\"type\": \"add\", \"text\": \"new\"},\n    {\"type\": \"remove\", \"text\": \"old\"},\n])\nassert result[0][\"accepted\"] == False\nassert result[1][\"accepted\"] == False\n\n\n# replace deleting 1-3 spaces -&gt; auto-accepted as equal\nresult = add_accepted_flags([{\"type\": \"replace\", \"old_text\": \"  \", \"new_text\": \"\"}])\nassert result == [{\"type\": \"equal\", \"text\": \"\", \"accepted\": True}]\n\n\n# real replace -&gt; not accepted\nresult = add_accepted_flags([{\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\"}])\nassert result == [{\"type\": \"replace\", \"old_text\": \"old\", \"new_text\": \"new\", \"accepted\": False}]\n\n\n# empty\nassert add_accepted_flags([]) == []",
+    "crumbs": [
+      "Clean"
+    ]
+  },
+  {
+    "objectID": "llm.html",
+    "href": "llm.html",
+    "title": "LLM",
+    "section": "",
+    "text": "Ask an LLM to rewrite text according to a goal description. Uses the OpenRouter API so any supported model can be swapped in.\n\nsource\n\n\n\nasync def get_llm_rewrite(\n    problem_description:str, current_text:str, api_key:str, model:str=''\n)-&gt;str:\n\nAsk an LLM to rewrite current_text to achieve problem_description.\nReturns the rewritten text string.",
+    "crumbs": [
+      "LLM"
+    ]
+  },
+  {
+    "objectID": "llm.html#llm-rewrite",
+    "href": "llm.html#llm-rewrite",
+    "title": "LLM",
+    "section": "",
+    "text": "Ask an LLM to rewrite text according to a goal description. Uses the OpenRouter API so any supported model can be swapped in.\n\nsource\n\n\n\nasync def get_llm_rewrite(\n    problem_description:str, current_text:str, api_key:str, model:str=''\n)-&gt;str:\n\nAsk an LLM to rewrite current_text to achieve problem_description.\nReturns the rewritten text string.",
+    "crumbs": [
+      "LLM"
+    ]
+  },
+  {
+    "objectID": "llm.html#semantic-grouping-via-llm",
+    "href": "llm.html#semantic-grouping-via-llm",
+    "title": "LLM",
+    "section": "Semantic grouping via LLM",
+    "text": "Semantic grouping via LLM\nAfter computing the diff, we can optionally ask an LLM to group semantically related changes together. For example, if changing a subject also requires changing the verb, those two replacements should be presented as one logical edit.\n\nsource\n\nget_semantic_groups\n\nasync def get_semantic_groups(\n    diff_items:List, api_key:str, model:str=''\n)-&gt;List:\n\nAsk the LLM which diff items should be grouped together.\nReturns a list of groups, where each group is a list of indices to merge.\n\nsource\n\n\nllm_semantic_grouping\n\nasync def llm_semantic_grouping(\n    ops:List, api_key:str, model:str=''\n)-&gt;List:\n\nUse an LLM to intelligently group semantically related diff ops.\nWraps get_semantic_groups + apply_semantic_groups. Falls back to returning ops unchanged if the LLM call fails.",
+    "crumbs": [
+      "LLM"
+    ]
+  },
+  {
+    "objectID": "llm.html#diff-pipeline",
+    "href": "llm.html#diff-pipeline",
+    "title": "LLM",
+    "section": "Diff pipeline",
+    "text": "Diff pipeline\nprocess_diff takes a raw original and rewritten text and runs the full cleanup → grouping → newline extraction → flagging pipeline.\nrequest_text_improvement is the top-level function: it asks the LLM to rewrite, then diffs and processes the result.\n\nsource\n\nprocess_diff\n\nasync def process_diff(\n    original:str, rewritten:str, api_key:str='', model:str='', semantic_grouping:bool=True\n)-&gt;List:\n\nRun the full diff pipeline: diff -&gt; clean -&gt; group -&gt; extract newlines -&gt; flag -&gt; (optional) LLM grouping.\nSet semantic_grouping=False to skip the LLM semantic grouping step.\n\nsource\n\n\nrequest_text_improvement\n\nasync def request_text_improvement(\n    problem_description:str, current_text:str, api_key:str='', model:str='', semantic_grouping:bool=True\n)-&gt;List:\n\nEnd-to-end: LLM rewrite then diff pipeline.\n\nAsk LLM to rewrite current_text according to problem_description\nCompute and process the diff between original and rewritten\n\nReturns a list of diff ops ready for display.",
+    "crumbs": [
+      "LLM"
+    ]
+  },
+  {
+    "objectID": "llm.html#tests",
+    "href": "llm.html#tests",
+    "title": "LLM",
+    "section": "Tests",
+    "text": "Tests\nThe LLM functions require an API key so we can’t run them in CI. We test process_diff without semantic grouping to validate the pipeline, and test request_text_improvement error handling.\n\n# process_diff without LLM grouping\nresult = await process_diff(\"the old cat\", \"the new cat\", semantic_grouping=False)\n\n# Should have equal + replace + equal, all with accepted flags\ntypes = [op[\"type\"] for op in result]\nassert \"replace\" in types\nassert all(\"accepted\" in op for op in result)\n\n# equal parts should be accepted, replace should not\nfor op in result:\n    if op[\"type\"] == \"equal\":\n        assert op[\"accepted\"] == True\n    elif op[\"type\"] == \"replace\":\n        assert op[\"accepted\"] == False\n\n\n# identical text -&gt; all equal\nresult = await process_diff(\"same text\", \"same text\", semantic_grouping=False)\nassert all(op[\"type\"] == \"equal\" for op in result)\nassert all(op[\"accepted\"] == True for op in result)\n\n\n# missing API key returns error ops (temporarily clear env var)\n_saved_key = os.environ.pop(\"OPENROUTER_API_KEY\", None)\nresult = await request_text_improvement(\"fix grammar\", \"hello world\", api_key=\"\")\nif _saved_key: os.environ[\"OPENROUTER_API_KEY\"] = _saved_key\nassert any(\"API Key missing\" in op.get(\"text\", \"\") for op in result)\n\n\n# process_diff with multiline text\nresult = await process_diff(\"line one\\nline two\", \"line one\\nline three\", semantic_grouping=False)\n# Should contain a newline equal block\nassert any(op.get(\"text\") == \"\\n\" and op[\"type\"] == \"equal\" for op in result)",
+    "crumbs": [
+      "LLM"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "text_diff",
+    "section": "",
+    "text": "pip install git+https://github.com/hugobellamy/text_diff.git",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "index.html#install",
+    "href": "index.html#install",
+    "title": "text_diff",
+    "section": "",
+    "text": "pip install git+https://github.com/hugobellamy/text_diff.git",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "index.html#compute-a-diff",
+    "href": "index.html#compute-a-diff",
+    "title": "text_diff",
+    "section": "Compute a diff",
+    "text": "Compute a diff\n\ncompute_diff(\"the old cat sat\", \"the new cat lay\")\n\n[{'type': 'equal', 'text': 'the '},\n {'type': 'replace', 'old_text': 'old', 'new_text': 'new'},\n {'type': 'equal', 'text': ' cat '},\n {'type': 'replace', 'old_text': 'sat', 'new_text': 'lay'}]",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "index.html#full-pipeline-no-llm",
+    "href": "index.html#full-pipeline-no-llm",
+    "title": "text_diff",
+    "section": "Full pipeline (no LLM)",
+    "text": "Full pipeline (no LLM)\n\nawait process_diff(\n    \"The old cat sat on the mat.\",\n    \"The new cat lay on the mat.\",\n    semantic_grouping=False\n)\n\n[{'type': 'equal', 'text': 'The ', 'accepted': True},\n {'type': 'replace', 'old_text': 'old', 'new_text': 'new', 'accepted': False},\n {'type': 'equal', 'text': ' cat ', 'accepted': True},\n {'type': 'replace', 'old_text': 'sat', 'new_text': 'lay', 'accepted': False},\n {'type': 'equal', 'text': ' on the mat.', 'accepted': True}]",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "index.html#track-and-accept-changes",
+    "href": "index.html#track-and-accept-changes",
+    "title": "text_diff",
+    "section": "Track and accept changes",
+    "text": "Track and accept changes\n\ndoc = DocumentState()\ndoc.add_segments([\n    {\"id\": \"1\", \"text\": \"The \", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n    {\"id\": \"2\", \"text\": \"old \", \"segment_type\": \"remove\", \"explanation\": \"replacing\", \"accepted\": False},\n    {\"id\": \"3\", \"text\": \"new \", \"segment_type\": \"add\", \"explanation\": \"replacing\", \"accepted\": False},\n    {\"id\": \"4\", \"text\": \"cat.\", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n])\n\nprint(\"before:\", doc.get_working_text())\ndoc.accept_segment(\"2\", \"add\")  # accept the new text\nprint(\"after: \", doc.get_working_text())\n\nbefore: The old cat.\nafter:  The new cat.",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "index.html#llm-powered-rewrite-diff",
+    "href": "index.html#llm-powered-rewrite-diff",
+    "title": "text_diff",
+    "section": "LLM-powered rewrite + diff",
+    "text": "LLM-powered rewrite + diff\nRequires an OpenRouter API key.\nresult = await request_text_improvement(\n    \"make it more concise\",\n    \"The cat sat on the mat and looked around the room slowly.\",\n    api_key=\"sk-or-...\"\n)",
+    "crumbs": [
+      "text_diff"
+    ]
+  },
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "Core",
+    "section": "",
+    "text": "source\n\nSegment\n\ndef Segment(\n    id:str, text:str, segment_type:str, explanation:str='', accepted:bool=False\n)-&gt;None:\n\n\ntest_segment_data = {\"id\": \"001\",\n                \"text\": \"hello\",\n                \"segment_type\": \"keep\",\n                \"explanation\": \"\",\n                \"accepted\": False}\n\ntest_segment = Segment.from_dict(test_segment_data)\n\nassert test_segment.id == test_segment_data[\"id\"]\nassert test_segment.text == test_segment_data[\"text\"]\nassert test_segment.segment_type == test_segment_data[\"segment_type\"]\n\nassert test_segment.to_dict() == test_segment_data\n\n\nsource\n\n\nDocumentState\n\ndef DocumentState(\n    segments:List=&lt;factory&gt;, history:List=&lt;factory&gt;, history_index:int=-1\n)-&gt;None:\n\nComplete document state with history tracking.\n\n# Test data: simulates a diff where \"The old sentence.\" becomes \"The new sentence.\"\ntest_segments_data = [\n    {\"id\": \"s1\", \"text\": \"The \", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n    {\"id\": \"s2\", \"text\": \"old \", \"segment_type\": \"remove\", \"explanation\": \"replacing word\", \"accepted\": False},\n    {\"id\": \"s3\", \"text\": \"new \", \"segment_type\": \"add\", \"explanation\": \"replacing word\", \"accepted\": False},\n    {\"id\": \"s4\", \"text\": \"sentence.\", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n]\n\ndoc = DocumentState()\ndoc.add_segments(test_segments_data)\n\nassert doc.get_working_text() == \"The old sentence.\"\nassert doc.get_final_text() == \"The sentence.\"\n\n# test accept replace pair (keep the new text)\ndoc.accept_segment(\"s2\", \"add\")\nassert doc.get_working_text() == \"The new sentence.\"\n\n# test edit segment\ndoc.edit_segment(\"s1\", \"A \")\nassert doc.get_working_text() == \"A new sentence.\"\n\n# test undo\ndoc.undo()\nassert doc.get_working_text() == \"The new sentence.\"\n\n# test redo\ndoc.redo()\nassert doc.get_working_text() == \"A new sentence.\"\n\n# test to_dict output\noutput = doc.to_dict()\nassert output[\"working_text\"] == \"A new sentence.\"\nassert output[\"final_text\"] == \"A new sentence.\"\nassert output[\"can_undo\"] == True\nassert output[\"can_redo\"] == False\nassert len(output[\"segments\"]) == 3\nassert output[\"segments\"][0][\"text\"] == \"A \"\nassert output[\"segments\"][0][\"segment_type\"] == \"keep\"\n\n\n# Test standalone remove: \"I really like cats\" where \"really \" is proposed for removal\nremove_data = [\n    {\"id\": \"r1\", \"text\": \"I \", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n    {\"id\": \"r2\", \"text\": \"really \", \"segment_type\": \"remove\", \"explanation\": \"unnecessary word\", \"accepted\": False},\n    {\"id\": \"r3\", \"text\": \"like cats.\", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n]\n\ndoc2 = DocumentState()\ndoc2.add_segments(remove_data)\nassert doc2.get_working_text() == \"I really like cats.\"\nassert doc2.get_final_text() == \"I like cats.\"\n\n# accept the removal (delete the segment)\ndoc2.accept_segment(\"r2\", \"accept-remove\")\nassert doc2.get_working_text() == \"I like cats.\"\nassert len(doc2.segments) == 2\n\n# undo — word comes back\ndoc2.undo()\nassert doc2.get_working_text() == \"I really like cats.\"\n\n# reject the removal (keep the word)\ndoc2.accept_segment(\"r2\", \"keep-remove\")\nassert doc2.get_working_text() == \"I really like cats.\"\nassert doc2.segments[1].segment_type == \"keep\"\n\n\n# Test standalone add: \"I like cats\" where \"really \" is proposed for insertion\nadd_data = [\n    {\"id\": \"a1\", \"text\": \"I \", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n    {\"id\": \"a2\", \"text\": \"really \", \"segment_type\": \"add\", \"explanation\": \"emphasis\", \"accepted\": False},\n    {\"id\": \"a3\", \"text\": \"like cats.\", \"segment_type\": \"keep\", \"explanation\": \"\", \"accepted\": True},\n]\n\ndoc3 = DocumentState()\ndoc3.add_segments(add_data)\nassert doc3.get_working_text() == \"I like cats.\"\nassert doc3.get_final_text() == \"I like cats.\"\n\n# accept the addition (convert to keep)\ndoc3.accept_segment(\"a2\", \"keep-add\")\nassert doc3.get_working_text() == \"I really like cats.\"\nassert doc3.segments[1].segment_type == \"keep\"\n\n# undo — goes back to proposed add\ndoc3.undo()\nassert doc3.get_working_text() == \"I like cats.\"\n\n# reject the addition (delete the segment)\ndoc3.accept_segment(\"a2\", \"reject-add\")\nassert doc3.get_working_text() == \"I like cats.\"\nassert len(doc3.segments) == 2\n\n\n# Test edge cases\ndoc4 = DocumentState()\ndoc4.add_segments(test_segments_data)\n\n# invalid segment id\nassert doc4.accept_segment(\"nonexistent\", \"add\") == False\nassert doc4.edit_segment(\"nonexistent\", \"hi\") == False\n\n# invalid action\nassert doc4.accept_segment(\"s1\", \"banana\") == False\n\n# undo/redo at boundaries\nassert doc4.undo() == False  # only one history entry, nothing to undo\nassert doc4.redo() == False  # nothing to redo\n\n# replace pair on last segment (no next segment)\nassert doc4.accept_segment(\"s4\", \"add\") == False\n\n# replace pair on non-pair (two keeps)\nassert doc4.accept_segment(\"s1\", \"remove\") == False\n\n# history truncation: make two edits, undo, make new edit, redo should fail\ndoc4.edit_segment(\"s1\", \"X \")\ndoc4.edit_segment(\"s1\", \"Y \")\ndoc4.undo()\nassert doc4.segments[0].text == \"X \"\ndoc4.edit_segment(\"s1\", \"Z \")\nassert doc4.redo() == False  # future was truncated",
+    "crumbs": [
+      "Core"
+    ]
+  },
+  {
+    "objectID": "group.html",
+    "href": "group.html",
+    "title": "Group",
+    "section": "",
+    "text": "Raw diffs often produce many small consecutive replace ops. group_replacements merges them into larger logical blocks, including absorbing small equal connectors (spaces, punctuation) between replaces.\nNewlines act as hard boundaries — we never merge across \\n.\n\nsource\n\n\n\ndef group_replacements(\n    ops:List\n)-&gt;List:\n\nMerge consecutive replace ops, absorbing small equal connectors between them.\nAlso merges consecutive same-type simple ops (equal, add, remove). Newlines in any op act as merge boundaries.\n\n# consecutive replaces merge\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"ab\", \"new_text\": \"xy\"}\n\n\n# replaces separated by small equal connector merge\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \" \"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"a b\", \"new_text\": \"x y\"}\n\n\n# large equal block prevents merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"long text here\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 3\n\n\n# newlines block merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"replace\", \"old_text\": \"b\\nc\", \"new_text\": \"y\\nz\"},\n]\nresult = group_replacements(ops)\n# first replace stays alone, second has newline so doesn't merge\nassert len(result) == 2\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"}\n\n\n# newline in equal connector blocks merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"\\n\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 3\n\n\n# consecutive same-type simple ops merge\nops = [\n    {\"type\": \"equal\", \"text\": \"hello \"},\n    {\"type\": \"equal\", \"text\": \"world\"},\n]\nresult = group_replacements(ops)\nassert result == [{\"type\": \"equal\", \"text\": \"hello world\"}]\n\n\n# empty\nassert group_replacements([]) == []",
+    "crumbs": [
+      "Group"
+    ]
+  },
+  {
+    "objectID": "group.html#grouping-replacements",
+    "href": "group.html#grouping-replacements",
+    "title": "Group",
+    "section": "",
+    "text": "Raw diffs often produce many small consecutive replace ops. group_replacements merges them into larger logical blocks, including absorbing small equal connectors (spaces, punctuation) between replaces.\nNewlines act as hard boundaries — we never merge across \\n.\n\nsource\n\n\n\ndef group_replacements(\n    ops:List\n)-&gt;List:\n\nMerge consecutive replace ops, absorbing small equal connectors between them.\nAlso merges consecutive same-type simple ops (equal, add, remove). Newlines in any op act as merge boundaries.\n\n# consecutive replaces merge\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"ab\", \"new_text\": \"xy\"}\n\n\n# replaces separated by small equal connector merge\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \" \"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 1\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"a b\", \"new_text\": \"x y\"}\n\n\n# large equal block prevents merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"long text here\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 3\n\n\n# newlines block merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"replace\", \"old_text\": \"b\\nc\", \"new_text\": \"y\\nz\"},\n]\nresult = group_replacements(ops)\n# first replace stays alone, second has newline so doesn't merge\nassert len(result) == 2\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"}\n\n\n# newline in equal connector blocks merging\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"\\n\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = group_replacements(ops)\nassert len(result) == 3\n\n\n# consecutive same-type simple ops merge\nops = [\n    {\"type\": \"equal\", \"text\": \"hello \"},\n    {\"type\": \"equal\", \"text\": \"world\"},\n]\nresult = group_replacements(ops)\nassert result == [{\"type\": \"equal\", \"text\": \"hello world\"}]\n\n\n# empty\nassert group_replacements([]) == []",
+    "crumbs": [
+      "Group"
+    ]
+  },
+  {
+    "objectID": "group.html#applying-semantic-groups",
+    "href": "group.html#applying-semantic-groups",
+    "title": "Group",
+    "section": "Applying semantic groups",
+    "text": "Applying semantic groups\nAfter the LLM suggests which ops should be grouped together (as lists of consecutive indices), apply_semantic_groups merges those ops into single blocks.\nMixed-type groups (e.g. equal + replace + add) get combined into a single replace with reconstructed old/new text.\n\nsource\n\napply_semantic_groups\n\ndef apply_semantic_groups(\n    ops:List, groups:List\n)-&gt;List:\n\nApply LLM-suggested semantic grouping to ops.\nEach group is a list of consecutive indices to merge into a single op. Non-consecutive groups are skipped. Ungrouped ops pass through as-is.\n\n# no groups -&gt; pass through\nops = [{\"type\": \"equal\", \"text\": \"hello\"}]\nassert apply_semantic_groups(ops, []) == ops\n\n\n# group two replaces\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n    {\"type\": \"equal\", \"text\": \" end\"},\n]\nresult = apply_semantic_groups(ops, [[0, 1]])\nassert len(result) == 2\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"ab\", \"new_text\": \"xy\", \"accepted\": False}\nassert result[1] == {\"type\": \"equal\", \"text\": \" end\"}\n\n\n# mixed types -&gt; becomes replace\nops = [\n    {\"type\": \"remove\", \"text\": \"old\"},\n    {\"type\": \"equal\", \"text\": \" \"},\n    {\"type\": \"add\", \"text\": \"new\"},\n]\nresult = apply_semantic_groups(ops, [[0, 1, 2]])\nassert len(result) == 1\nassert result[0] == {\"type\": \"replace\", \"old_text\": \"old \", \"new_text\": \" new\", \"accepted\": False}\n\n\n# non-consecutive group is skipped (each index handled individually)\nops = [\n    {\"type\": \"replace\", \"old_text\": \"a\", \"new_text\": \"x\"},\n    {\"type\": \"equal\", \"text\": \"middle\"},\n    {\"type\": \"replace\", \"old_text\": \"b\", \"new_text\": \"y\"},\n]\nresult = apply_semantic_groups(ops, [[0, 2]])  # non-consecutive!\nassert len(result) == 3  # nothing merged\n\n\n# multiple independent groups\nops = [\n    {\"type\": \"add\", \"text\": \"a\"},\n    {\"type\": \"add\", \"text\": \"b\"},\n    {\"type\": \"equal\", \"text\": \" mid \"},\n    {\"type\": \"remove\", \"text\": \"c\"},\n    {\"type\": \"remove\", \"text\": \"d\"},\n]\nresult = apply_semantic_groups(ops, [[0, 1], [3, 4]])\nassert len(result) == 3\nassert result[0] == {\"type\": \"add\", \"text\": \"ab\", \"accepted\": False}\nassert result[1] == {\"type\": \"equal\", \"text\": \" mid \"}\nassert result[2] == {\"type\": \"remove\", \"text\": \"cd\", \"accepted\": False}",
+    "crumbs": [
+      "Group"
+    ]
+  }
+]

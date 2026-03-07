@@ -1,0 +1,1 @@
+Sitemap: https://hugobellamy.github.io/text_diff/sitemap.xml
