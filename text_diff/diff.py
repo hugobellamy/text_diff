@@ -31,7 +31,13 @@ def compute_diff(original: str, rewritten: str) -> List[Dict[str, Any]]:
 
     A = tokenize_preserving_whitespace(original)
     B = tokenize_preserving_whitespace(rewritten)
-    sm = SequenceMatcher(None, A, B)
+    # autojunk=False is essential: with the default (True), SequenceMatcher
+    # treats any token in >1% of a sequence longer than 200 items as "popular
+    # junk" and skips it when matching. In prose that hits the space token and
+    # common words (the/to/a/and) — exactly the anchors that keep edits
+    # word-sized — so a long document collapses into paragraph-sized
+    # replacements. Disabling autojunk keeps changes word-level on any length.
+    sm = SequenceMatcher(None, A, B, autojunk=False)
     ops = []
 
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
