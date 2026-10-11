@@ -9,6 +9,8 @@ then accept, reject or tweak each block, and can optionally see a short reason f
 
 The data shapes and calls a UI can rely on are in [INTERFACE.md](INTERFACE.md).
 
+![Reviewing a rewrite as sentence-sized changes](docs/screenshot.png)
+
 ## Install
 
 ``` sh
