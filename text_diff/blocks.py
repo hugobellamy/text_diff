@@ -144,14 +144,18 @@ def comment_prompt(blocks: List[Dict[str, Any]], goal: str = "") -> str:
              for b in blocks if b["type"] == "change"]
     return (
         (f"The writer's goal: {goal}\n\n" if goal else "")
-        + "For each edit below, give a short reason (under 12 words) for the change, "
-        "written for the writer, e.g. \"Removes repetition\" or \"More formal tone\".\n\n"
+        + "Each item below is one edit to the writer's text. For each, write a short reason "
+        "the writer can scan: what the edit does and why it helps, in under 10 words. "
+        "Start with a verb, use sentence case and no full stop, and don't just repeat the new "
+        "wording. Good examples: \"Fixes subject-verb agreement\", \"Cuts filler words\", "
+        "\"Splits a long sentence in two\", \"More formal greeting\".\n\n"
         + json.dumps(items, indent=2, ensure_ascii=False)
-        + '\n\nReturn ONLY a JSON object mapping each id to its reason, e.g. {"1": "..."}.'
+        + '\n\nReturn ONLY a JSON object mapping each id to its reason, e.g. {"1": "Cuts filler words"}.'
     )
 
 def parse_comments(content: str) -> Dict[str, str]:
     "Pull the JSON object out of an LLM reply, tolerating code fences and stray text."
+    content = re.sub(r"<think>.*?</think>", "", content, flags=re.S)
     start, end = content.find("{"), content.rfind("}") + 1
     if start == -1 or end == 0: return {}
     data = json.loads(content[start:end])
@@ -206,7 +210,7 @@ async def improve_text(
     from text_diff.llm import get_llm_rewrite
     api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key: raise ValueError("No API key: pass api_key or set OPENROUTER_API_KEY.")
-    rewritten = await get_llm_rewrite(goal or "Improve clarity and flow.", text, api_key, model)
+    rewritten = await get_llm_rewrite(goal, text, api_key, model)
     blocks = compute_blocks(text, rewritten, granularity)
     if comments: blocks = await add_comments(blocks, api_key, goal, model)
     return blocks

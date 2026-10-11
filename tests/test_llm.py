@@ -49,3 +49,21 @@ def test_process_diff_with_multiline_text():
         # Should contain a newline equal block
         assert any(op.get("text") == "\n" and op["type"] == "equal" for op in result)
     asyncio.run(run())
+
+
+def test_rewrite_prompt_wraps_text_and_defaults_goal():
+    p = build_rewrite_prompt("", "Hello there.")
+    assert p.startswith("Goal: Improve clarity")
+    assert "<text>\nHello there.\n</text>" in p
+    assert build_rewrite_prompt("be formal", "x").startswith("Goal: be formal\n")
+
+
+def test_clean_rewrite_strips_wrappers_and_keeps_outer_whitespace():
+    original = "\n  Some text.\n\n"
+    assert clean_rewrite("Better text.", original) == "\n  Better text.\n\n"
+    assert clean_rewrite("```\nBetter text.\n```", "Some text.") == "Better text."
+    assert clean_rewrite("```markdown\nA\n\nB\n```", "a\n\nb") == "A\n\nB"
+    assert clean_rewrite("<think>hmm</think>\n<text>\nBetter.\n</text>", "x") == "Better."
+    assert clean_rewrite("Edited text: Better.", "x") == "Better."
+    # inner structure is untouched
+    assert clean_rewrite("Line one.\n\nLine two.", "a\n\nb") == "Line one.\n\nLine two."

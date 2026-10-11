@@ -95,3 +95,7 @@ def test_comments():
     assert out[int(ids[0])]["comment"] == "Clearer verb"
     assert all(b["comment"] == "" for b in out if b["id"] != ids[0])
     assert '"before": "The cat sat on the mat."' in comment_prompt(bl, "be concise")
+
+
+def test_parse_comments_ignores_reasoning_block():
+    assert parse_comments('<think>maybe {"x": 1}?</think>{"0": "Cuts filler words"}') == {"0": "Cuts filler words"}
